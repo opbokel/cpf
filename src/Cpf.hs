@@ -1,15 +1,15 @@
 module Cpf (CpfError,
             Cpf,
-            ValidatedResult,
-            fromString,
-            validFormat11,
-            validFormat9,
-            appendCheckDigits,
-            validCpf,
-            cpfGenerator,
-            pretty,
-            fromShow11,
-            fromShow9
+            -- ValidatedResult,
+            -- fromString,
+            -- validFormat11,
+            -- validFormat9,
+            -- appendCheckDigits,
+            -- validCpf,
+            -- cpfGenerator,
+            -- pretty,
+            -- fromShow11,
+            -- fromShow9
             ) where
 
 import Prelude
@@ -17,75 +17,112 @@ import Data.Char
 import Data.List
 import Data.Maybe
 import System.Random 
-import Data.List.Split
 import Data.Either
+import Data.Int (Int64, Int8)
+import Data.Ix (inRange)
 
-data CpfError = InvalidCpfLenght | InvalidCpfDigit | InvalidCpfCheckDigit deriving Show
+data CpfError = 
+    InvalidCpfLength | 
+    InvalidCpfValue | 
+    InvalidCpfCheckDigits deriving Show
 
-type Cpf = [Int]
+type Cpf = Int64
 
-type ValidatedResult = Either CpfError Cpf
+type CpfResult = Either CpfError Cpf
 
-lengthWithCheckDigits = 11
-lengthNoCheckDigits = 9
+maxLength :: Int
+maxLength = 11
 
-fromString :: String -> Cpf
-fromString = fmap digitToInt . filter isDigit
+maxIndex :: Int
+maxIndex = maxLength - 1
 
-validFormat :: Int -> Cpf -> ValidatedResult
-validFormat expectedLenght cpf = validLength >> validDigits
+maxLengthNoCheck :: Int
+maxLengthNoCheck = 9
+
+maxValueNoCheck :: Int64
+maxValueNoCheck = (10 ^ maxLengthNoCheck) - 1
+
+minValue :: Int64
+minValue = 1
+
+maxValue :: Int64
+maxValue = (10 ^ maxLength) - 1
+
+fromShow :: Show a => (Int, Int) -> a -> CpfResult
+fromShow range cpf = 
+    let digits = filter isDigit (show cpf)
+    in if inRange range $ length digits
+       then Right (read digits) else Left InvalidCpfLength
+
+
+fromShow11 :: Show a => a -> CpfResult
+fromShow11 = fromShow (maxLength, maxLength)
+
+fromShow9 :: Show a => a -> CpfResult
+fromShow9 = fromShow (maxLengthNoCheck, maxLengthNoCheck)
+
+
+getDigit :: (Integral a) => Cpf -> Int -> a
+getDigit cpf lsdOffset = 
+    if inRange (0, maxIndex) lsdOffset
+    then fromIntegral $ cpf `div` (10 ^ lsdOffset) `rem` 10 else 0
+
+
+getDigits :: (Integral a) =>  Int -> Cpf -> [a]
+getDigits length cpf = getDigit cpf <$> [length - 1, length - 2 .. 0]
+
+-- getDigits11 :: (Integral a) => Cpf -> [a]
+getDigits11 = getDigits maxLength
+getDigits9 = getDigits maxLengthNoCheck
+
+toString :: Int -> Cpf -> String
+toString size cpf = intToDigit <$> getDigits size cpf
+
+toString11 = toString maxLength
+toString9 = toString maxLengthNoCheck
+
+appendCheckDigit :: Int -> Cpf -> Cpf
+appendCheckDigit length cpf = 
+    (cpf * 10) + fromIntegral digit
     where
-        validDigits = if isJust (find (\d -> d < 0 || d > 9) cpf) then Left InvalidCpfDigit else Right cpf
-        validLength = if expectedLenght == length cpf then Right cpf else Left InvalidCpfLenght
+       multiplyDigit lsdOffset = getDigit cpf lsdOffset * (lsdOffset + 2) 
+       digitsSum = sum $ multiplyDigit <$> [0 .. length - 1]
+       digit = if digitsSum `mod` 11 < 2 then 0 else 11 - digitsSum `mod` 11
 
-validFormat11 = validFormat lengthWithCheckDigits
+validCpfRange :: Int64 -> Cpf -> CpfResult
+validCpfRange maxRangeValue cpf = if inRange (minValue, maxRangeValue) cpf then Right cpf else Left InvalidCpfValue
 
-validFormat9 = validFormat lengthNoCheckDigits
+fitIn9Digits = validCpfRange maxValueNoCheck
 
-calculateCheckDigit :: Int -> Cpf -> Int
-calculateCheckDigit firstMultiplier cpf =
-   if mod digitsSum 11 < 2 then 0 else 11 - mod digitsSum 11
-   where
-       digitsSum = sum $ uncurry (*) <$> take (firstMultiplier - 1) (zip [firstMultiplier, firstMultiplier - 1 .. 2] cpf)
+fitIn11Digits = validCpfRange maxValue
 
-appendCheckDigits :: Cpf -> ValidatedResult
-appendCheckDigits cpf = do
-    validFormat9 cpf
-    let checkDigit1 = calculateCheckDigit 10 cpf
-    let checkDigit2 = calculateCheckDigit 11 (cpf ++ [checkDigit1])
-    return (cpf ++ [checkDigit1, checkDigit2])
+appendCheckDigits :: Cpf -> CpfResult
+appendCheckDigits cpf = appendCheckDigit 10 . appendCheckDigit 9 <$> fitIn9Digits cpf  
 
-validCpf :: Cpf -> ValidatedResult
+validCpf :: Cpf -> CpfResult
 validCpf cpf = do
-    validFormat11 cpf 
-    cpfWithGeneratedDigits <- appendCheckDigits (take lengthNoCheckDigits cpf)
-    if cpf == cpfWithGeneratedDigits then Right cpf else Left InvalidCpfCheckDigit
+    fitIn11Digits cpf 
+    correctCpf <- appendCheckDigits (cpf `div` 100)
+    if cpf == correctCpf then Right cpf else Left InvalidCpfCheckDigits
 
-cpfGenerator :: Int -> [Cpf]
-cpfGenerator seed = rights $ appendCheckDigits <$> chunksOf lengthNoCheckDigits digits
+
+cpfGenerator9 :: Int -> [Cpf]
+cpfGenerator9 seed = unfoldr (Just . uniformR (minValue, maxValueNoCheck)) (mkStdGen seed)
+
+cpfGenerator11 :: Int -> [Cpf]
+cpfGenerator11 seed  = rights $ appendCheckDigits <$> cpfGenerator9 seed
+
+getDigitChar :: Cpf -> Int -> Char
+getDigitChar cpf = intToDigit . getDigit cpf
+
+pretty9 :: Cpf -> String
+pretty9 cpf = [d 8, d 7, d 6, '.', d 5, d 4, d 3, '.', d 2, d 1, d 0]
     where
-        digits = unfoldr (Just . uniformR (0, 9)) (mkStdGen seed)
+        d = getDigitChar cpf
 
-toString :: Cpf -> String
-toString = fmap intToDigit
-
-pretty :: Cpf -> String
-pretty cpf = intercalate "" $ separate <$> zip [0..] (chunksOf 3 $ toString cpf)
+pretty11 :: Cpf -> String
+pretty11 cpf =  [d 10, d 9, d 8, '.', d 7, d 6, d 5, '.', d 4, d 3, d 2, '-', d 1, d 0]
     where
-        separate (index, chunk) 
-            | index == 3 = '-' : chunk
-            | index > 0 && index < 3 = '.' : chunk
-            | otherwise = chunk
+        d = getDigitChar cpf
 
-fromShow :: Show a => Int -> a -> Cpf
-fromShow minSize showableCpf = 
-    let cpf = fromString (show showableCpf)
-        missingZeros = minSize - length cpf
-    in if missingZeros > 0 then replicate missingZeros 0 ++ cpf else cpf
-
-fromShow11 :: Show a => a -> Cpf
-fromShow11 = fromShow lengthWithCheckDigits
-
-fromShow9 :: Show a => a -> Cpf
-fromShow9 = fromShow lengthNoCheckDigits
     
