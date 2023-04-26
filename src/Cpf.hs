@@ -1,15 +1,22 @@
-module Cpf (CpfError,
-            Cpf,
-            -- ValidatedResult,
-            -- fromString,
-            -- validFormat11,
-            -- validFormat9,
-            -- appendCheckDigits,
-            -- validCpf,
-            -- cpfGenerator,
-            -- pretty,
-            -- fromShow11,
-            -- fromShow9
+module Cpf (Cpf,
+            CpfError,
+            CpfResult,
+            fromShow,
+            fromShow9,
+            fromShow11,
+            getDigit,
+            getDigits,
+            getDigits9,
+            getDigits11,
+            validCpfRange,
+            fitIn9Digits,
+            fitIn11Digits,
+            appendCheckDigits,
+            validCpf,
+            cpfGenerator9,
+            cpfGenerator11,
+            pretty9,
+            pretty11,
             ) where
 
 import Prelude
@@ -54,13 +61,11 @@ fromShow range cpf =
     in if inRange range $ length digits
        then Right (read digits) else Left InvalidCpfLength
 
-
-fromShow11 :: Show a => a -> CpfResult
-fromShow11 = fromShow (maxLength, maxLength)
-
 fromShow9 :: Show a => a -> CpfResult
 fromShow9 = fromShow (maxLengthNoCheck, maxLengthNoCheck)
 
+fromShow11 :: Show a => a -> CpfResult
+fromShow11 = fromShow (maxLength, maxLength)
 
 getDigit :: (Integral a) => Cpf -> Int -> a
 getDigit cpf lsdOffset = 
@@ -71,15 +76,17 @@ getDigit cpf lsdOffset =
 getDigits :: (Integral a) =>  Int -> Cpf -> [a]
 getDigits length cpf = getDigit cpf <$> [length - 1, length - 2 .. 0]
 
--- getDigits11 :: (Integral a) => Cpf -> [a]
-getDigits11 = getDigits maxLength
+getDigits9 :: (Integral a) => Cpf -> [a]
 getDigits9 = getDigits maxLengthNoCheck
+
+getDigits11 :: (Integral a) => Cpf -> [a]
+getDigits11 = getDigits maxLength
 
 toString :: Int -> Cpf -> String
 toString size cpf = intToDigit <$> getDigits size cpf
 
-toString11 = toString maxLength
 toString9 = toString maxLengthNoCheck
+toString11 = toString maxLength
 
 appendCheckDigit :: Int -> Cpf -> Cpf
 appendCheckDigit length cpf = 
@@ -121,7 +128,7 @@ pretty9 cpf = [d 8, d 7, d 6, '.', d 5, d 4, d 3, '.', d 2, d 1, d 0]
         d = getDigitChar cpf
 
 pretty11 :: Cpf -> String
-pretty11 cpf =  [d 10, d 9, d 8, '.', d 7, d 6, d 5, '.', d 4, d 3, d 2, '-', d 1, d 0]
+pretty11 cpf = [d 10, d 9, d 8, '.', d 7, d 6, d 5, '.', d 4, d 3, d 2, '-', d 1, d 0]
     where
         d = getDigitChar cpf
 
