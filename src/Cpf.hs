@@ -1,22 +1,11 @@
-module Cpf (Cpf,
-            CpfError,
-            CpfResult,
-            fromShow,
-            fromShow9,
-            fromShow11,
-            getDigit,
-            getDigits,
-            getDigits9,
-            getDigits11,
-            validCpfRange,
-            fitIn9Digits,
-            fitIn11Digits,
-            appendCheckDigits,
-            validCpf,
-            cpfGenerator9,
-            cpfGenerator11,
-            pretty9,
-            pretty11,
+module Cpf (Cpf, CpfError, CpfResult, BrazilianState,
+            fromShow, fromShow9, fromShow11, clipTo9Digits,
+            getDigit, getDigits, getDigits9, getDigits11,
+            validCpfRange, fitIn9Digits, fitIn11Digits,
+            appendCheckDigits, validCpf,
+            cpfGenerator9, cpfGenerator11, generateCpf9, generateCpf11,
+            pretty9, pretty11,
+            getStates9, getStates11, getStates
             ) where
 
 import Prelude
@@ -29,9 +18,9 @@ import Data.Int (Int64, Int8)
 import Data.Ix (inRange)
 
 data CpfError = 
-    InvalidCpfLength | 
-    InvalidCpfValue | 
-    InvalidCpfCheckDigits deriving Show
+    InvalidCpfLength | InvalidCpfValue | InvalidCpfCheckDigits deriving (Show, Enum, Eq)
+
+data BrazilianState = RJ|SP|ES|MG|PR|SC|RS|MS|GO|AC|AL|AP|AM|BA|CE|DF|MA|MT|PA|PB|PE|PI|RN|RO|RR|SE|TO deriving (Show, Enum, Eq)
 
 type Cpf = Int64
 
@@ -97,7 +86,8 @@ appendCheckDigit length cpf =
        digit = if digitsSum `mod` 11 < 2 then 0 else 11 - digitsSum `mod` 11
 
 validCpfRange :: Int64 -> Cpf -> CpfResult
-validCpfRange maxRangeValue cpf = if inRange (minValue, maxRangeValue) cpf then Right cpf else Left InvalidCpfValue
+validCpfRange maxRangeValue cpf = 
+    if inRange (minValue, maxRangeValue) cpf then Right cpf else Left InvalidCpfValue
 
 fitIn9Digits = validCpfRange maxValueNoCheck
 
@@ -109,7 +99,7 @@ appendCheckDigits cpf = appendCheckDigit 10 . appendCheckDigit 9 <$> fitIn9Digit
 validCpf :: Cpf -> CpfResult
 validCpf cpf = do
     fitIn11Digits cpf 
-    correctCpf <- appendCheckDigits (cpf `div` 100)
+    correctCpf <- appendCheckDigits (clipTo9Digits cpf)
     if cpf == correctCpf then Right cpf else Left InvalidCpfCheckDigits
 
 
@@ -119,8 +109,15 @@ cpfGenerator9 seed = unfoldr (Just . uniformR (minValue, maxValueNoCheck)) (mkSt
 cpfGenerator11 :: Int -> [Cpf]
 cpfGenerator11 seed  = rights $ appendCheckDigits <$> cpfGenerator9 seed
 
+generateCpf9 :: Int -> Cpf
+generateCpf9 = head . take 1 . cpfGenerator9
+
+generateCpf11 :: Int -> Cpf
+generateCpf11 = head . take 1 . cpfGenerator11
+
 getDigitChar :: Cpf -> Int -> Char
 getDigitChar cpf = intToDigit . getDigit cpf
+
 
 pretty9 :: Cpf -> String
 pretty9 cpf = [d 8, d 7, d 6, '.', d 5, d 4, d 3, '.', d 2, d 1, d 0]
@@ -131,5 +128,29 @@ pretty11 :: Cpf -> String
 pretty11 cpf = [d 10, d 9, d 8, '.', d 7, d 6, d 5, '.', d 4, d 3, d 2, '-', d 1, d 0]
     where
         d = getDigitChar cpf
+
+
+clipTo9Digits :: Cpf -> Cpf
+clipTo9Digits cpf = cpf `div` 100
+
+getStates9 :: Cpf -> [BrazilianState]
+getStates9 cpf = getStates $ getDigit cpf 0
+
+getStates11 :: Cpf -> [BrazilianState]
+getStates11 cpf = getStates $ getDigit cpf 2
+
+getStates :: Int -> [BrazilianState]
+getStates 0 = [RS]
+getStates 1 = [DF, GO, MT, MS, TO]
+getStates 2 = [AC, AP, AM, PA, RO, RR]
+getStates 3 = [CE, MA, PI]
+getStates 4 = [AL, PB, PE, RN]
+getStates 5 = [BA, SE]
+getStates 6 = [MG]
+getStates 7 = [ES, RJ]
+getStates 8 = [SP]
+getStates 9 = [PR, SC]
+getStates _ = []
+
 
     
